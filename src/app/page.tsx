@@ -32,16 +32,78 @@ export default function Home() {
         setLoading(true);
         setError(null);
         
-        // Use a CORS proxy to bypass CORS restrictions
-        const corsProxy = 'https://api.allorigins.win/raw?url=';
-        const targetUrl = 'https://pcgamer.com/news';
-        const response = await fetch(corsProxy + encodeURIComponent(targetUrl));
+        console.log('Starting to scrape data...');
         
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+        // Try multiple CORS proxies as fallback
+        const corsProxies = [
+          'https://corsproxy.io/?',
+          'https://api.codetabs.com/v1/proxy?quest=',
+          'https://thingproxy.freeboard.io/fetch/'
+        ];
+        
+        const targetUrl = 'https://pcgamer.com/news';
+        let response = null;
+        
+        for (const proxy of corsProxies) {
+          try {
+            const fullUrl = proxy + encodeURIComponent(targetUrl);
+            console.log('Trying proxy:', proxy);
+            
+            response = await fetch(fullUrl, {
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+              },
+              signal: AbortSignal.timeout(10000) // 10 second timeout
+            });
+            
+            console.log('Response status:', response.status);
+            
+            if (response.ok) {
+              console.log('Success with proxy:', proxy);
+              break;
+            }
+          } catch (err) {
+            console.log('Failed with proxy:', proxy, err);
+            continue;
+          }
+        }
+        
+        if (!response || !response.ok) {
+          console.log('All CORS proxies failed, showing sample data');
+          // Fallback to sample data if all proxies fail
+          setScrapedData({
+            success: true,
+            url: targetUrl,
+            contentLength: 0,
+            parsedContent: {
+              title: 'PC Gamer News (Sample Data)',
+              articles: [
+                {
+                  title: 'Sample Article 1 - CORS proxy unavailable',
+                  image: 'https://via.placeholder.com/300x140/40E0D0/004D4D?text=Sample+Image',
+                  url: '#'
+                },
+                {
+                  title: 'Sample Article 2 - Please check console for errors',
+                  image: 'https://via.placeholder.com/300x140/40E0D0/004D4D?text=Sample+Image',
+                  url: '#'
+                },
+                {
+                  title: 'Sample Article 3 - Try refreshing the page',
+                  image: 'https://via.placeholder.com/300x140/40E0D0/004D4D?text=Sample+Image',
+                  url: '#'
+                }
+              ]
+            }
+          });
+          setLoading(false);
+          return;
         }
 
         const html = await response.text();
+        
+        console.log('HTML length:', html.length);
+        console.log('First 500 chars:', html.substring(0, 500));
         
         // Parse the HTML to extract content
         const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);

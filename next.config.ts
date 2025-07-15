@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
   images: {
     unoptimized: true
   },
-  basePath: process.env.NODE_ENV === 'production' ? '/gaming-feed' : '',
+  basePath: process.env.NODE_ENV === 'production' ? '/gaming-news' : '',
 };
 
 export default nextConfig;
