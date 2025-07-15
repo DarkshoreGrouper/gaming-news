@@ -1,103 +1,157 @@
-import Image from "next/image";
+export default async function Home() {
+  // Direct server-side scraping for static export
+  let scrapedData = null;
+  let error = null;
+  let parsedContent = null;
+  
+  try {
+    const response = await fetch('https://pcgamer.com/news', {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      }
+    });
 
-export default function Home() {
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const html = await response.text();
+    scrapedData = {
+      success: true,
+      url: 'https://pcgamer.com/news',
+      contentLength: html.length,
+      html: html
+    };
+
+    // Parse the HTML on the server side to extract actual content
+    const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+    const title = titleMatch ? titleMatch[1] : 'No title found';
+    
+    // Extract all article tags and their content
+    const articleRegex = /<article[^>]*>([\s\S]*?)<\/article>/gi;
+    const articles = [];
+    let articleMatch;
+    
+    while ((articleMatch = articleRegex.exec(html)) !== null) {
+      const articleHtml = articleMatch[1];
+      
+      // Find figure tag with data-original attribute
+      const figureMatch = articleHtml.match(/<figure[^>]*>[\s\S]*?data-original="([^"]*)"[\s\S]*?<\/figure>/i);
+      const imageUrl = figureMatch ? figureMatch[1] : '';
+      
+      // Find article-name class
+      const articleNameMatch = articleHtml.match(/<h3[^>]*class="article-name"[^>]*>([^<]+)<\/h3>/i);
+      const articleTitle = articleNameMatch ? articleNameMatch[1].trim() : '';
+      
+      if (articleTitle && imageUrl) {
+        // Find the href by looking for the a tag that contains this article
+        // Search backwards from the article position to find the most recent a tag
+        const articleStart = articleMatch.index;
+        const beforeArticle = html.substring(0, articleStart);
+        const aTags = beforeArticle.match(/<a[^>]*href="([^"]*)"[^>]*>/g);
+        const articleUrl = aTags && aTags.length > 0 ? 
+          (aTags[aTags.length - 1].match(/href="([^"]*)"/) || [])[1] || '' : '';
+        
+        if (articleUrl) {
+          articles.push({
+            title: articleTitle,
+            image: imageUrl,
+            url: articleUrl
+          });
+        }
+      }
+    }
+
+    parsedContent = {
+      title,
+      articles
+    };
+
+  } catch (err) {
+    error = err instanceof Error ? err.message : 'Unknown error occurred';
+    scrapedData = {
+      success: false,
+      error: error
+    };
+  }
+  
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+    <div 
+      className="min-h-screen w-full"
+      style={{ backgroundColor: '#004D4D', padding: '20px' }}
+    >
+      <div className="max-w-4xl mx-auto">
+        <h1 style={{ color: '#E0E0E0', fontSize: '32px', fontFamily: 'Inter, sans-serif', textAlign: 'center', marginBottom: '30px' }}>
+          Gaming News Feed
+        </h1>
+        
+        {scrapedData.success ? (
+          <div>
+            <p style={{ color: '#E0E0E0', fontSize: '16px', textAlign: 'center', marginBottom: '20px' }}>
+              Successfully scraped {scrapedData.contentLength} characters from {scrapedData.url}
+            </p>
+            
+            {parsedContent && (
+              <div style={{ color: '#E0E0E0' }}>
+                <h2 style={{ fontSize: '24px', marginBottom: '20px', color: '#40E0D0' }}>
+                  Latest News from PC Gamer
+                </h2>
+                
+                <div style={{ backgroundColor: 'rgba(0,0,0,0.3)', padding: '20px', borderRadius: '10px' }}>
+                  <h3 style={{ fontSize: '18px', marginBottom: '15px', color: '#40E0D0' }}>
+                    Page Title: {parsedContent.title}
+                  </h3>
+                  
+                  <h4 style={{ fontSize: '16px', marginBottom: '20px', color: '#40E0D0' }}>Recent Articles:</h4>
+                  <div style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', 
+                    gap: '20px' 
+                  }}>
+                    {parsedContent.articles.map((article, index) => (
+                      <a 
+                        key={index}
+                        href={article.url} 
+                        target="_blank" 
+                        style={{ 
+                          textDecoration: 'none', 
+                          color: 'inherit',
+                          backgroundColor: 'rgba(0,0,0,0.2)',
+                          borderRadius: '8px',
+                          overflow: 'hidden',
+                          transition: 'transform 0.2s',
+                          cursor: 'pointer'
+                        }}
+                        onMouseOver={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
+                        onMouseOut={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+                      >
+                        <img 
+                          src={article.image} 
+                          alt={article.title} 
+                          style={{
+                            width: '100%',
+                            height: '140px',
+                            objectFit: 'cover',
+                            display: 'block'
+                          }}
+                          onError={(e) => e.currentTarget.style.display = 'none'}
+                        />
+                        <div style={{ padding: '15px', fontSize: '14px', lineHeight: '1.4' }}>
+                          {article.title}
+                        </div>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p style={{ color: '#E0E0E0', fontSize: '16px', textAlign: 'center' }}>
+            Failed to scrape data: {scrapedData.error}
+          </p>
+        )}
+      </div>
     </div>
   );
 }
