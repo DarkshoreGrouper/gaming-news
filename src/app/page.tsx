@@ -1,80 +1,105 @@
-export default async function Home() {
-  // Direct server-side scraping for static export
-  let scrapedData = null;
-  let error = null;
-  let parsedContent = null;
-  
-  try {
-    const response = await fetch('https://pcgamer.com/news', {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-      }
-    });
+'use client';
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
+import { useState, useEffect } from 'react';
 
-    const html = await response.text();
-    scrapedData = {
-      success: true,
-      url: 'https://pcgamer.com/news',
-      contentLength: html.length,
-      html: html
-    };
+interface Article {
+  title: string;
+  image: string;
+  url: string;
+}
 
-    // Parse the HTML on the server side to extract actual content
-    const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
-    const title = titleMatch ? titleMatch[1] : 'No title found';
-    
-    // Extract all article tags and their content
-    const articleRegex = /<article[^>]*>([\s\S]*?)<\/article>/gi;
-    const articles = [];
-    let articleMatch;
-    
-    while ((articleMatch = articleRegex.exec(html)) !== null) {
-      const articleHtml = articleMatch[1];
-      
-      // Find figure tag with data-original attribute
-      const figureMatch = articleHtml.match(/<figure[^>]*>[\s\S]*?data-original="([^"]*)"[\s\S]*?<\/figure>/i);
-      const imageUrl = figureMatch ? figureMatch[1] : '';
-      
-      // Find article-name class
-      const articleNameMatch = articleHtml.match(/<h3[^>]*class="article-name"[^>]*>([^<]+)<\/h3>/i);
-      const articleTitle = articleNameMatch ? articleNameMatch[1].trim() : '';
-      
-      if (articleTitle && imageUrl) {
-        // Find the href by looking for the a tag that contains this article
-        // Search backwards from the article position to find the most recent a tag
-        const articleStart = articleMatch.index;
-        const beforeArticle = html.substring(0, articleStart);
-        const aTags = beforeArticle.match(/<a[^>]*href="([^"]*)"[^>]*>/g);
-        const articleUrl = aTags && aTags.length > 0 ? 
-          (aTags[aTags.length - 1].match(/href="([^"]*)"/) || [])[1] || '' : '';
+interface ParsedContent {
+  title: string;
+  articles: Article[];
+}
+
+interface ScrapedData {
+  success: boolean;
+  url: string;
+  contentLength: number;
+  parsedContent: ParsedContent;
+  error?: string;
+}
+
+export default function Home() {
+  const [scrapedData, setScrapedData] = useState<ScrapedData | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const scrapeData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
         
-        if (articleUrl) {
-          articles.push({
-            title: articleTitle,
-            image: imageUrl,
-            url: articleUrl
-          });
+        // Use a CORS proxy to bypass CORS restrictions
+        const corsProxy = 'https://api.allorigins.win/raw?url=';
+        const targetUrl = 'https://pcgamer.com/news';
+        const response = await fetch(corsProxy + encodeURIComponent(targetUrl));
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
         }
+
+        const html = await response.text();
+        
+        // Parse the HTML to extract content
+        const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+        const title = titleMatch ? titleMatch[1] : 'No title found';
+        
+        // Extract all article tags and their content
+        const articleRegex = /<article[^>]*>([\s\S]*?)<\/article>/gi;
+        const articles: Article[] = [];
+        let articleMatch;
+        
+        while ((articleMatch = articleRegex.exec(html)) !== null) {
+          const articleHtml = articleMatch[1];
+          
+          // Find figure tag with data-original attribute
+          const figureMatch = articleHtml.match(/<figure[^>]*>[\s\S]*?data-original="([^"]*)"[\s\S]*?<\/figure>/i);
+          const imageUrl = figureMatch ? figureMatch[1] : '';
+          
+          // Find article-name class
+          const articleNameMatch = articleHtml.match(/<h3[^>]*class="article-name"[^>]*>([^<]+)<\/h3>/i);
+          const articleTitle = articleNameMatch ? articleNameMatch[1].trim() : '';
+          
+          if (articleTitle && imageUrl) {
+            // Find the href by looking for the a tag that contains this article
+            const articleStart = articleMatch.index;
+            const beforeArticle = html.substring(0, articleStart);
+            const aTags = beforeArticle.match(/<a[^>]*href="([^"]*)"[^>]*>/g);
+            const articleUrl = aTags && aTags.length > 0 ? 
+              (aTags[aTags.length - 1].match(/href="([^"]*)"/) || [])[1] || '' : '';
+            
+            if (articleUrl) {
+              articles.push({
+                title: articleTitle,
+                image: imageUrl,
+                url: articleUrl
+              });
+            }
+          }
+        }
+
+        setScrapedData({
+          success: true,
+          url: targetUrl,
+          contentLength: html.length,
+          parsedContent: {
+            title,
+            articles
+          }
+        });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Unknown error occurred');
+      } finally {
+        setLoading(false);
       }
-    }
-
-    parsedContent = {
-      title,
-      articles
     };
 
-  } catch (err) {
-    error = err instanceof Error ? err.message : 'Unknown error occurred';
-    scrapedData = {
-      success: false,
-      error: error
-    };
-  }
-  
+    scrapeData();
+  }, []); // Empty dependency array means this runs once on mount
+
   return (
     <div 
       className="min-h-screen w-full"
@@ -85,13 +110,21 @@ export default async function Home() {
           Gaming News Feed
         </h1>
         
-        {scrapedData.success ? (
+        {loading ? (
+          <p style={{ color: '#E0E0E0', fontSize: '16px', textAlign: 'center' }}>
+            Loading latest news...
+          </p>
+        ) : error ? (
+          <p style={{ color: '#E0E0E0', fontSize: '16px', textAlign: 'center' }}>
+            Failed to fetch data: {error}
+          </p>
+        ) : scrapedData ? (
           <div>
             <p style={{ color: '#E0E0E0', fontSize: '16px', textAlign: 'center', marginBottom: '20px' }}>
               Successfully scraped {scrapedData.contentLength} characters from {scrapedData.url}
             </p>
             
-            {parsedContent && (
+            {scrapedData.parsedContent && (
               <div style={{ color: '#E0E0E0' }}>
                 <h2 style={{ fontSize: '24px', marginBottom: '20px', color: '#40E0D0' }}>
                   Latest News from PC Gamer
@@ -99,20 +132,17 @@ export default async function Home() {
                 
                 <div style={{ backgroundColor: 'rgba(0,0,0,0.3)', padding: '20px', borderRadius: '10px' }}>
                   <h3 style={{ fontSize: '18px', marginBottom: '15px', color: '#40E0D0' }}>
-                    Page Title: {parsedContent.title}
+                    Page Title: {scrapedData.parsedContent.title}
                   </h3>
                   
                   <h4 style={{ fontSize: '16px', marginBottom: '20px', color: '#40E0D0' }}>Recent Articles:</h4>
-                  <div style={{ 
-                    display: 'grid', 
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', 
-                    gap: '20px' 
-                  }}>
-                    {parsedContent.articles.map((article, index) => (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                    {scrapedData.parsedContent.articles.map((article: Article, index: number) => (
                       <a 
                         key={index}
                         href={article.url} 
                         target="_blank" 
+                        rel="noopener noreferrer"
                         style={{ 
                           textDecoration: 'none', 
                           color: 'inherit',
@@ -146,11 +176,7 @@ export default async function Home() {
               </div>
             )}
           </div>
-        ) : (
-          <p style={{ color: '#E0E0E0', fontSize: '16px', textAlign: 'center' }}>
-            Failed to scrape data: {scrapedData.error}
-          </p>
-        )}
+        ) : null}
       </div>
     </div>
   );
